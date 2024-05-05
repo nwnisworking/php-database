@@ -38,11 +38,18 @@ class Select extends Query{
 
   private bool $column_values = false; # This will assume column data is not a value
 
+  private ?Query $prev_stmt = null;
+
   public function __construct(?string $table = null, ?array $columns = ['*']){
     parent::__construct($table, $columns);
 
     if($this->isAssoc())
       throw new ColumnException;
+  }
+
+  public function prepend(Query $query): self{
+    $this->prev_stmt = $query;
+    return $this;
   }
 
   public function enclose(?bool $value = null): self|bool{
@@ -95,7 +102,7 @@ class Select extends Query{
       throw new JoinTypeException;
 
     if(!isset($this->join[$table]))
-      $this->join[$table] = ['type'=>$type, 'condition'=>$condition];
+      $this->join[$table] = ['type'=>$type, 'condition'=>[$condition]];
 
     else
       $this->join[$table]['condition'][] = $condition;
@@ -146,6 +153,9 @@ class Select extends Query{
   public function values(): array{
     $values = [];
 
+    if($this->prev_stmt)
+      $values = array_merge($values, $this->prev_stmt->values());
+
     if($this->column_values){
       foreach($this->columns as $v){
         if(is_a($v, Ignore::class) || is_null($v))
@@ -158,6 +168,9 @@ class Select extends Query{
           $values[] = $v;
       }
     }
+
+    foreach($this->join as $v)
+      $values = array_merge($values, ...array_map(fn($e)=>$e->values(), $v['condition']));
 
     foreach(array_merge($this->where, $this->having) as $v){
       array_push($values, ...$v->values());
@@ -182,6 +195,9 @@ class Select extends Query{
 
   public function __toString(): string{
     $str = "SELECT ";
+
+    if($this->prev_stmt)
+      $str = $this->prev_stmt.' '.$str;
 
     if($this->distinct)
       $str.= "DISTINCT ";
@@ -216,7 +232,7 @@ class Select extends Query{
     $str = trim($str);
 
     if(isset($this->with))
-      return "WITH $this->with ($str)";
+      return "WITH $this->with AS ($str)";
 
     if($this->enclose || ($this->alias && $this->enclose(true)))
       return "($str)".($this->alias ? " $this->alias" : '');

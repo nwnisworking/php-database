@@ -77,5 +77,15 @@ abstract class Driver{
     return !($res = $this->execute()) ?: $res->fetchAll(PDO::FETCH_FUNC, $fn);
   }
 
+  public function beginTransaction(): self{
+    self::$pdo->beginTransaction();
+    return $this;
+  }
+
+  public function rollback(): self{
+    self::$pdo->rollBack();
+    return $this;
+  }
+
   public abstract function connect(): ?self;
 }
